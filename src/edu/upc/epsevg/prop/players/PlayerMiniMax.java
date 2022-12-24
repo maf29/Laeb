@@ -25,8 +25,8 @@ import java.util.Map;
 */
 public class PlayerMiniMax implements IPlayer, IAuto{
     String name = "La'eb";
-    private int MAX = Integer.MAX_VALUE;
-    private int MIN = Integer.MIN_VALUE;
+    private final int MAX = Integer.MAX_VALUE;
+    private final int MIN = Integer.MIN_VALUE;
     private static final int MAX_DEPTH = 8;
    
     private boolean timeout = false;
@@ -53,8 +53,8 @@ public class PlayerMiniMax implements IPlayer, IAuto{
   
     // We consider:
     //      0: empty cell
-    //      1: player 1
-    //      -1: player 2
+    //      1: player 1 (Black)
+    //      -1: player 2 (White)
     
     /**
     Calcula la mejor jugada para el jugador actual en el 
@@ -83,9 +83,7 @@ public class PlayerMiniMax implements IPlayer, IAuto{
             GameStatus nextBoard = new GameStatus​(gs);
             
             nextBoard.movePiece​(move);  //movement of possible move
-         
-            CellType opp = CellType.opposite​(nextBoard.getCurrentPlayer());
-            
+          
             int score = minimax(nextBoard, MAX_DEPTH, MIN, MAX, false);
             
             if (score > bestScore) {
@@ -147,10 +145,9 @@ public class PlayerMiniMax implements IPlayer, IAuto{
         if (alpha >= beta) {
             return heuristica(gs);
         }
-        
         // When a player can't make a move, do a skipTurn() so the next 
         //player can make a move
-        if (gs.getMoves().size() == 0) {
+        if (gs.getMoves().isEmpty()) {
             gs.skipTurn();
             return minimax(gs, depth, alpha, beta, maximizingPlayer);
         }
@@ -161,7 +158,6 @@ public class PlayerMiniMax implements IPlayer, IAuto{
         if (depth == 1) {
             return heuristica(gs);
         }
-        
         // If the depth of the minimax function is 0, it means that the search 
         //has reached the maximum depth that you have set for the search tree. 
         //In this case, you can return the heuristic score of the current state 

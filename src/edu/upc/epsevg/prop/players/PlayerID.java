@@ -21,8 +21,8 @@ import java.util.Map;
  */
 public class PlayerID implements IPlayer, IAuto{
     String name = "La'eb";
-    private int MAX = Integer.MAX_VALUE;
-    private int MIN = Integer.MIN_VALUE;
+    private final int MAX = Integer.MAX_VALUE;
+    private final int MIN = Integer.MIN_VALUE;
     private static final int MAX_DEPTH = 8;
    
     private boolean timeout = false;
@@ -49,8 +49,8 @@ public class PlayerID implements IPlayer, IAuto{
   
     // We consider:
     //      0: empty cell
-    //      1: player 1
-    //      -1: player 2
+    //      1: player 1 (Black)
+    //      -1: player 2 (White)
    
    private static long[][][] hashTable;  // Hash table for storing game statuses
     private HashMap<Long, Integer> transpositionTable;  // Transposition table for storing heuristic values
@@ -83,8 +83,6 @@ public class PlayerID implements IPlayer, IAuto{
             
             nextBoard.movePiece​(move);  //movement of possible move
             
-            CellType opp = CellType.opposite​(nextBoard.getCurrentPlayer());
-           
             int score = minimax(nextBoard, MAX_DEPTH, MIN, MAX, false);
        
             if (score > bestScore) {
@@ -129,12 +127,13 @@ public class PlayerID implements IPlayer, IAuto{
     @return Valor heurístico de la mejor jugada para el jugador actual.
     */
     private int minimax(GameStatus gs, int depth, double alpha, double beta, boolean maximizingPlayer) {
-        //TIMEOUT
+        //TIMEOUT----------
         if (timeout) {    
             return 0;
         }
+        
         // Calculate the hash value of the current game status using the Zobrist hashing method
-        transpositionTable = new HashMap<Long, Integer>();
+        transpositionTable = new HashMap<>();
         hashTable = new long[8][8][3];
         
         long hash = 0;
@@ -147,29 +146,43 @@ public class PlayerID implements IPlayer, IAuto{
             }
         }
        
-        // BASE CASES
-        // Game over: When the game is over (that is, there are no more valid moves left), you can return the heuristic score for the current state of the game.
+        // BASE CASES---------
+        // Game over: When the game is over (that is, there are no more valid
+        //moves left), you can return the heuristic score for the 
+        //current state of the game.
         if (gs.isGameOver()) {
             return heuristica(gs);
         }
-        // Alpha-beta limits: If the current alpha value is greater than or equal to the beta value, you can return the heuristic score for the current state of the game, since any subsequent search will not be useful.
+        
+        // Alpha-beta limits: If the current alpha value is greater than or 
+        //equal to the beta value, you can return the heuristic score for the 
+        //current state of the game, since any subsequent search will not be useful.
         if (alpha >= beta) {
             return heuristica(gs);
         }
-        // When a player can't make a move, do a skipTurn() so the next player can make a move
-        if (gs.getMoves().size() == 0) {
+        
+        // When a player can't make a move, do a skipTurn() so the next 
+        // player can make a move
+        if (gs.getMoves().isEmpty()) {
             gs.skipTurn();
             return minimax(gs, depth, alpha, beta, maximizingPlayer);
         }
-        // If the depth is 1, the minimax function will evaluate the heuristic scores for the game states that can be reached by making a move from the current game state
+        
+        // If the depth is 1, the minimax function will evaluate the heuristic 
+        //scores for the game states that can be reached by making a move 
+        //from the current game state
         if (depth == 1) {
             return heuristica(gs);
         }
-        // If the depth of the minimax function is 0, it means that the search has reached the maximum depth that you have set for the search tree. In this case, you can return the heuristic score of the current state of the game as a result of the minimax function.
+        
+        // If the depth of the minimax function is 0, it means that the search 
+        //has reached the maximum depth that you have set for the search tree. 
+        //In this case, you can return the heuristic score of the current state 
+        //of the game as a result of the minimax function.
         if (depth == 0) {
             return heuristica(gs);
         }
-
+        
         // Check if the current game status is in the transposition table
         if (transpositionTable.containsKey(hash)) {
             // If it is, return the stored heuristic value
