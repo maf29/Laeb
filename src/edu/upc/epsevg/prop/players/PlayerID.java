@@ -24,54 +24,54 @@ public class PlayerID implements IPlayer, IAuto{
     private int MAX = Integer.MAX_VALUE;
     private int MIN = Integer.MIN_VALUE;
     private static final int MAX_DEPTH = 8;
-    
-     private boolean timeout = false;
-    private int TAULERS_EXAMINATS_TOTAL; //prof
+   
+    private boolean timeout = false;
+    private int TAULERS_EXAMINATS_TOTAL; //depth
     private long TAULERS_EXAMINATS; //nodes explorats
-    //private HashMap<GameStatus, Integer> transpositionTable; //string: gamestatus; integer: heuristic
-    private java.awt.Point to = new Point(2,4);
     
-    // The board is represented as a 2D array of integers.
-    // 0: empty cell
-    // 1: player 1's disc
-    // -1: player 2's disc
+    private static final int[][] VALUES_TABLE = {
+    { 120, -20,  20,   5,   5,  20, -20, 120 },
+    { -20, -40,  -5,  -5,  -5,  -5, -40, -20 },
+    {  20,  -5,  15,   3,   3,  15,  -5,  20 },
+    {   5,  -5,   3,   3,   3,   3,  -5,   5 },
+    {   5,  -5,   3,   3,   3,   3,  -5,   5 },
+    {  20,  -5,  15,   3,   3,  15,  -5,  20 },
+    { -20, -40,  -5,  -5,  -5,  -5, -40, -20 },
+    { 120, -20,  20,   5,   5,  20, -20, 120 }
+    };
     
-    private int[][] board;
-    private int turn;  // 1 for player 1, -1 for player 2
-    
-    /*Esta función devuelve una HashTable que mapea cada posible GameStatus
-    después de hacer un movimiento a una 
-    puntuación entera correspondiente obtenida por el algoritmo minimax. La 
-    función itera a través de todos los movimientos posibles, crea un nuevo 
-    objeto GameStatus para cada movimiento, y calcula la puntuación utilizando 
-    la función minimax. La puntuación se añade entonces a la HashTable con el 
-    objeto GameStatus correspondiente como clave.*/
-    private HashMap<GameStatus, Integer> transpositionTable;
-    public HashMap<GameStatus, Integer> hashBoard(GameStatus gs) {
-    
-        HashMap<GameStatus, Integer> heuristics = new HashMap<>();
-        ArrayList<Point> moves = gs.getMoves();
-
-        for (Point move : moves) {
-            GameStatus nextBoard = new GameStatus​(gs);
-            nextBoard.movePiece​(move);
-
-            int score = minimax(nextBoard, MAX_DEPTH, MIN, MAX, false);
-
-            heuristics.put(nextBoard, score);
-        }
-        return heuristics;
-    }
-
+    private static final int WEIGHT_NUM_MOVES = 5;
+    private static final int WEIGHT_MOBILITY = 1;
+    private static final int WEIGHT_STABLE_DISCS = 10;
+    private static final int WEIGHT_CORNER_DISCS = 20;
+    private static final int WEIGHT_DISC_PARITY = 20;
+    private static final int WEIGHT_DISCS_CONTROLLED = 10;
+  
+    // We consider:
+    //      0: empty cell
+    //      1: player 1
+    //      -1: player 2
+   
+   private static long[][][] hashTable;  // Hash table for storing game statuses
+    private HashMap<Long, Integer> transpositionTable;  // Transposition table for storing heuristic values
+   
+    /**
+    Calcula la mejor jugada para el jugador actual en el 
+    estado de la partida usando el algoritmo minimax.
+    @param gs Estado actual de la partida.
+    @return La mejor jugada para el jugador actual.
+    */
     @Override
     public Move move(GameStatus gs) {
         
         TAULERS_EXAMINATS=0;
         TAULERS_EXAMINATS_TOTAL=1;
         ArrayList<Point> moves = gs.getMoves();
-        transpositionTable = new HashMap<>();
-              
+      
+        // Check if the current player has any possible moves
         if (moves.isEmpty()) {
+            // If the current player has no possible moves, call the "skipTurn" method
+            gs.skipTurn();
             return null;
         }
         
@@ -81,76 +81,102 @@ public class PlayerID implements IPlayer, IAuto{
         for (Point move : moves) {
             GameStatus nextBoard = new GameStatus​(gs);
             
-            nextBoard.movePiece​(move);  //movimiento de una posicion posible
+            nextBoard.movePiece​(move);  //movement of possible move
             
             CellType opp = CellType.opposite​(nextBoard.getCurrentPlayer());
-                       
-            //HASH TABLE VA AQUI
-            HashMap<GameStatus, Integer> boardHash = hashBoard(nextBoard);
-            int score;
-            if (transpositionTable.containsKey(boardHash)) {
-                // Si ya hemos evaluado este tablero, devolvemos la heurística almacenada en la tabla
-                score = transpositionTable.get(boardHash);
-            } else {
-                // Si no hemos evaluado este tablero, lo evaluamos con minimax y almacenamos la heurística en la tabla
-                score = minimax(nextBoard, MAX_DEPTH, MIN, MAX, false);
-                transpositionTable.putAll(boardHash); 
-            }
-            
+           
+            int score = minimax(nextBoard, MAX_DEPTH, MIN, MAX, false);
+       
             if (score > bestScore) {
                 bestScore = score;
                 bestMove = move;
             }  
-            TAULERS_EXAMINATS_TOTAL++;  
+            TAULERS_EXAMINATS_TOTAL++;     
         }
-        Move move = new Move(bestMove, TAULERS_EXAMINATS, TAULERS_EXAMINATS_TOTAL, SearchType.MINIMAX);
+        Move move = new Move(bestMove, TAULERS_EXAMINATS, TAULERS_EXAMINATS_TOTAL, SearchType.MINIMAX_IDS);
         
-        return move;//new Move(bestMove.x, bestMove.y) 
+        return move;
     }
 
+    /**
+    Establece el tiempo de espera en true e imprime un mensaje.
+    */
     @Override
     public void timeout() {
-        // Bah! Humans do not enjoy timeouts, oh, poor beasts !
         timeout = true;
         System.out.println("Bah! You are so slow...");
     }
 
+    /**
+    Devuelve el nombre de este jugador.
+    @return El nombre de este jugador.
+    */
     @Override
     public String getName() {
         return name;
     }
     
+    /**
+    Calcula la mejor jugada para el jugador actual en el estado de juego
+    * dado usando el algoritmo minimax con poda alfa-beta 
+    * y tabla de transposición de Zobrish.
+    @param gs Estado actual de la partida.
+    @param depth La profundidad de búsqueda restante.
+    @param alpha El valor alfa para la poda alfa-beta.
+    @param beta El valor beta para la poda alfa-beta.
+    @param maximizingPlayer Bandera que indica si el jugador actual es el 
+    * jugador maximizador (true) o el jugador minimizador (false).
+    @return Valor heurístico de la mejor jugada para el jugador actual.
+    */
     private int minimax(GameStatus gs, int depth, double alpha, double beta, boolean maximizingPlayer) {
-
         //TIMEOUT
-         if (timeout) {    //--> en vez de poner if de la funcion, crear una variable global
+        if (timeout) {    
             return 0;
         }
-         
-        //CASOS BASE
-        if(gs.checkGameOver()){                      //  someone wins
-            if(gs.getCurrentPlayer() == gs.GetWinner())  //  wins la'eb
-                return 1000000;
-            else{                                    //  wins the other one
-                return -1000000;
+        // Calculate the hash value of the current game status using the Zobrist hashing method
+        transpositionTable = new HashMap<Long, Integer>();
+        hashTable = new long[8][8][3];
+        
+        long hash = 0;
+        for (int i = 0; i < gs.getSize(); i++) {
+            for (int j = 0; j < gs.getSize(); j++) {
+                int value = 0;
+                if(gs.getPos(i,j)== CellType.PLAYER1) value = 1;
+                else if (gs.getPos(i,j)== CellType.PLAYER2) value = -1;
+                hash ^= hashTable[i][j][value + 1];
             }
         }
-        else if(gs.isGameOver() || depth==0){    //depth 0 or not possible moves
+       
+        // BASE CASES
+        // Game over: When the game is over (that is, there are no more valid moves left), you can return the heuristic score for the current state of the game.
+        if (gs.isGameOver()) {
             return heuristica(gs);
         }
-        if(!gs.currentPlayerCanMove()){  //contrincant no pot moure
-            System.out.println("!gs.currentPlayerCanMove()");
-            if(maximizingPlayer){
-                gs.skipTurn();
-                //return minimax(gs, depth-1, alpha, beta, false);
-            }
-            else{ 
-                return minimax(gs, depth - 1, alpha, beta, true);
-            }
+        // Alpha-beta limits: If the current alpha value is greater than or equal to the beta value, you can return the heuristic score for the current state of the game, since any subsequent search will not be useful.
+        if (alpha >= beta) {
+            return heuristica(gs);
+        }
+        // When a player can't make a move, do a skipTurn() so the next player can make a move
+        if (gs.getMoves().size() == 0) {
             gs.skipTurn();
+            return minimax(gs, depth, alpha, beta, maximizingPlayer);
+        }
+        // If the depth is 1, the minimax function will evaluate the heuristic scores for the game states that can be reached by making a move from the current game state
+        if (depth == 1) {
+            return heuristica(gs);
+        }
+        // If the depth of the minimax function is 0, it means that the search has reached the maximum depth that you have set for the search tree. In this case, you can return the heuristic score of the current state of the game as a result of the minimax function.
+        if (depth == 0) {
+            return heuristica(gs);
+        }
+
+        // Check if the current game status is in the transposition table
+        if (transpositionTable.containsKey(hash)) {
+            // If it is, return the stored heuristic value
+            return transpositionTable.get(hash);
         }
         
-        if (maximizingPlayer){  //minimizar
+        if (maximizingPlayer){  //minimize
             int bestScore = MIN;
             for (Point move : gs.getMoves()) {
                 GameStatus nextBoard = new GameStatus​(gs);
@@ -160,12 +186,14 @@ public class PlayerID implements IPlayer, IAuto{
                 bestScore = Math.max(score, bestScore);
                 
                 alpha = Math.max(alpha, bestScore);
-                if (beta <= alpha) {    //PODA alfa-beta
+                if (beta <= alpha) {    //alpha-beta pruing
                   break;
                 }
             }
+            transpositionTable.put(hash, bestScore);
             return bestScore;
-        } else{ //maximizar
+            
+        } else{ //maximize
             int bestScore = MAX;
             for (Point move : gs.getMoves()) {
                 GameStatus nextBoard = new GameStatus​(gs);
@@ -175,45 +203,203 @@ public class PlayerID implements IPlayer, IAuto{
                 bestScore = Math.min(score, bestScore);
                 
                 beta = Math.min(beta, bestScore);
-                if (beta <= alpha) {    //PODA alfa-beta
+                if (beta <= alpha) {    //alpha-beta pruing
                   break;
                 }
             }
+            transpositionTable.put(hash, bestScore);
             return bestScore;
         }
-        //return 0;
     }
-     
-    public int heuristica (GameStatus t) {
-        TAULERS_EXAMINATS++;
-        int [][] values = {
-            { 120, -20,  20,   5,   5,  20, -20, 120 },
-            { -20, -40,  -5,  -5,  -5,  -5, -40, -20 },
-            {  20,  -5,  15,   3,   3,  15,  -5,  20 },
-            {   5,  -5,   3,   3,   3,   3,  -5,   5 },
-            {   5,  -5,   3,   3,   3,   3,  -5,   5 },
-            {  20,  -5,  15,   3,   3,  15,  -5,  20 },
-            { -20, -40,  -5,  -5,  -5,  -5, -40, -20 },
-            { 120, -20,  20,   5,   5,  20, -20, 120 }
-        };
-        
-        int score = 0;
-        for (int i = 0; i < t.getSize(); i++) {
-            for (int j = 0; j < t.getSize(); j++) {
-                
-                CellType piece = t.getPos​(j,i);
-                
-                if(piece == t.getCurrentPlayer()){
-                    score += values[i][j];
-                } else if(piece == CellType.opposite​(t.getCurrentPlayer())){    
-                    //conseguir jugador oponente
-                    score -= values[i][j];
+    
+    /**
+    Determina si el disco en el punto dado del 
+    * estado del juego es estable.
+    Un disco se considera estable si está rodeado de discos del mismo 
+    * del mismo color en cualquier dirección.
+    @param p El punto del disco a comprobar.
+    @param gs El estado actual del juego.
+    @return true si el disco en el punto dado es estable, false en caso contrario.
+    */
+    private boolean isStable(Point p, GameStatus gs) {
+        // Check if the disc at the given point is stable
+        CellType disc = gs.getPos(p.x, p.y);
+        if (disc == CellType.EMPTY) {
+            return false;
+        }
+
+        int size = gs.getSize();
+
+        // Check the rows and columns adjacent to the disc
+        for (int i = -1; i <= 1; i++) {
+            for (int j = -1; j <= 1; j++) {
+                if (i == 0 && j == 0) {
+                    continue;
+                }
+                int x = p.x + i;
+                int y = p.y + j;
+                if (x >= 0 && x < size && y >= 0 && y < size && gs.getPos(x, p.y) == disc && gs.getPos(p.x, y) == disc) {
+                    return true;
                 }
             }
-        }  
+        }
+
+        // Check the diagonals adjacent to the disc
+        if (p.x - 1 >= 0 && p.y - 1 >= 0 && p.x + 1 < size && p.y + 1 < size && gs.getPos(p.x - 1, p.y - 1) == disc && gs.getPos(p.x + 1, p.y + 1) == disc) {
+            return true;
+        }
+        if (p.x - 1 >= 0 && p.y + 1 < size && p.x + 1 < size && p.y - 1 >= 0 && gs.getPos(p.x - 1, p.y + 1) == disc && gs.getPos(p.x + 1, p.y - 1) == disc) {
+            return true;
+        }
+
+        return false;
+    }
+    
+    /**
+    Calcula una puntuación heurística para el jugador actual 
+    * en el estado de juego dado.
+    La puntuación se basa en el número de discos, la movilidad, la estabilidad 
+    * y posición estratégica de los discos del jugador,
+    * así como los valores correspondientes de los discos del oponente.
+    @param gs Estado actual de la partida.
+    @return Puntuación heurística del jugador actual.
+   */
+    public int heuristica(GameStatus gs) {
+        TAULERS_EXAMINATS++;
+
+        // Initialize the score to the number of discs for the player
+        int score = gs.getScore(gs.getCurrentPlayer());
+
+        // Add a penalty for each possible move the opponent has
+        int numMoves = gs.getMoves().size();
+        score -= numMoves * WEIGHT_NUM_MOVES;
+
+        // Add a bonus for each disc that has mobility
+        for (int i = 0; i < gs.getSize(); i++) {
+            for (int j = 0; j < gs.getSize(); j++) {
+                if (gs.getPos(j, i) == gs.getCurrentPlayer()) {
+                    score += gs.getMoves().size() * WEIGHT_MOBILITY;
+                }
+            }
+        }
+
+        // Add a bonus for each stable disc
+        for (int i = 0; i < gs.getSize(); i++) {
+            for (int j = 0; j < gs.getSize(); j++) {
+                if (isStable(new Point(i, j), gs)) {
+                    score += WEIGHT_STABLE_DISCS;
+                }
+            }
+        }
+
+        // Add a bonus for each disc in a corner
+        for (int i = 0; i < gs.getSize(); i++) {
+            for (int j = 0; j < gs.getSize(); j++) {
+                if (gs.getPos(j, i) == gs.getCurrentPlayer() &&
+                    ((i == 0 && j == 0) || (i == 0 && j == gs.getSize() - 1) ||
+                     (i == gs.getSize() - 1 && j == 0) || (i == gs.getSize() - 1 && j == gs.getSize() - 1))) {
+                    score += WEIGHT_CORNER_DISCS;
+                }
+            }
+        }
+
+        // Add a penalty for each disc in a corner occupied by the opponent
+        for (int i = 0; i < gs.getSize(); i++) {
+            for (int j = 0; j < gs.getSize(); j++) {
+                if (gs.getPos(j, i) == CellType.opposite(gs.getCurrentPlayer()) &&
+                    ((i == 0 && j == 0) || (i == 0 && j == gs.getSize() - 1) ||
+                     (i == gs.getSize() - 1 && j == 0) || (i == gs.getSize() - 1 && j == gs.getSize() - 1))) {
+                    score -= WEIGHT_CORNER_DISCS;
+                }
+            }
+        }
+
+        // Add the values from the values table for each disc
+        for (int i = 0; i < gs.getSize(); i++) {
+            for (int j = 0; j < gs.getSize(); j++) {
+            CellType piece = gs.getPos(j, i);
+            if (piece == gs.getCurrentPlayer()) {
+                        score += VALUES_TABLE[i][j];
+                    } else if (piece == CellType.opposite(gs.getCurrentPlayer())) {
+                        score -= VALUES_TABLE[i][j];
+                    }
+                }
+            }// Add a bonus for each disc controlled by the player
+            int numDiscs = gs.getScore(gs.getCurrentPlayer());
+            score += numDiscs * WEIGHT_DISCS_CONTROLLED;
+
+            // Add a penalty for each disc controlled by the opponent
+            int numOpponentDiscs = gs.getScore(CellType.opposite(gs.getCurrentPlayer()));
+            score -= numOpponentDiscs * WEIGHT_DISCS_CONTROLLED;
+
+            // Add a bonus for each disc with mobility
+            for (int i = 0; i < gs.getSize(); i++) {
+                for (int j = 0; j < gs.getSize(); j++) {
+                    if (gs.getPos(j, i) == gs.getCurrentPlayer()) {
+                        int mobility = getMobility(gs, new Point(i, j), gs.getCurrentPlayer());
+                        score += mobility * WEIGHT_MOBILITY;
+                    }
+                }
+            }
+
+            // Add a penalty for each disc with mobility for the opponent
+            for (int i = 0; i < gs.getSize(); i++) {
+                for (int j = 0; j < gs.getSize(); j++) {
+                    if (gs.getPos(j, i) == CellType.opposite(gs.getCurrentPlayer())) {
+                        int mobility = getMobility(gs, new Point(i, j), CellType.opposite(gs.getCurrentPlayer()));
+                        score -= mobility * WEIGHT_MOBILITY;
+                    }
+                }
+            }
+
+            // Add a bonus for a parity advantage (more discs on the board)
+            int discParity = gs.getScore(gs.getCurrentPlayer()) - gs.getScore(CellType.opposite(gs.getCurrentPlayer()));
+            if (discParity > 0) {
+                score += discParity * WEIGHT_DISC_PARITY;
+            } else if (discParity < 0) {
+                score -= -discParity * WEIGHT_DISC_PARITY;
+            }
+
+            // Add a bonus for moves that increase the player's mobility
+            for (Point move : gs.getMoves()) {
+                int mobilityBefore = getMobility(gs, move, gs.getCurrentPlayer());
+                int mobilityAfter = getMobility(gs, move, CellType.opposite(gs.getCurrentPlayer()));
+                score += (mobilityAfter - mobilityBefore) * WEIGHT_MOBILITY;
+            }
+
         return score;
     }
-
-
     
+    /**
+    Calcula el número de movimientos posibles para el jugador dado 
+    * en el estado actual de la partida.
+    @param gs Estado actual de la partida.
+    @param p La casilla actual.
+    @param player El jugador para el que se calcula la movilidad.
+    @return Número de movimientos posibles para el jugador dado en el 
+    * estado actual de la partida.
+    */
+    public int getMobility(GameStatus gs, Point p, CellType player) {
+        int mobility = 0;
+
+        int size = gs.getSize();
+
+        // Iterate through the eight directions around the given cell
+        for (int dx = -1; dx <= 1; dx++) {
+            for (int dy = -1; dy <= 1; dy++) {
+                if (dx == 0 && dy == 0) {
+                    continue;
+                }
+
+                // Check if the current direction has a valid move
+                int x = p.x + dx;
+                int y = p.y + dy;
+                if (x >= 0 && x < size && y >= 0 && y < size && gs.canMove(new Point(x, y), player)) {
+                    mobility++;
+                }
+            }
+        }
+        
+        return mobility;
+    }
 }

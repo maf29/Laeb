@@ -19,20 +19,20 @@ import java.util.List;
 import java.util.Map;
 
 
+
 /**
- *
- * @author UX431F
- */
+ * @author Fatine Maataoui & Cinta Gonzalez
+*/
 public class PlayerMiniMax implements IPlayer, IAuto{
     String name = "La'eb";
     private int MAX = Integer.MAX_VALUE;
     private int MIN = Integer.MIN_VALUE;
     private static final int MAX_DEPTH = 8;
+   
+    private boolean timeout = false;
+    private int TAULERS_EXAMINATS_TOTAL; //depth
+    private long TAULERS_EXAMINATS; //nodes explorats
     
-     private boolean timeout = false;
-    private int TAULERS_EXAMINATS_TOTAL; //prof
-    private long TAULERS_EXAMINATS;
-    private java.awt.Point to = new Point(2,4);
     private static final int[][] VALUES_TABLE = {
     { 120, -20,  20,   5,   5,  20, -20, 120 },
     { -20, -40,  -5,  -5,  -5,  -5, -40, -20 },
@@ -48,131 +48,170 @@ public class PlayerMiniMax implements IPlayer, IAuto{
     private static final int WEIGHT_MOBILITY = 1;
     private static final int WEIGHT_STABLE_DISCS = 10;
     private static final int WEIGHT_CORNER_DISCS = 20;
-    private static final int WEIGHT_DISC_PARITY = 10;
-    private static final int WEIGHT_DISCS_CONTROLLED = 20;
-    // The board is represented as a 2D array of integers.
-    // 0: empty cell
-    // 1: player 1's disc
-    // -1: player 2's disc
+    private static final int WEIGHT_DISC_PARITY = 20;
+    private static final int WEIGHT_DISCS_CONTROLLED = 10;
+  
+    // We consider:
+    //      0: empty cell
+    //      1: player 1
+    //      -1: player 2
     
-    private int[][] board;
-    private int turn;  // 1 for player 1, -1 for player 2
-    HashMap<GameStatus, Integer> transpositionTable = new HashMap<>();
-    
+    /**
+    Calcula la mejor jugada para el jugador actual en el 
+    estado de la partida usando el algoritmo minimax.
+    @param gs Estado actual de la partida.
+    @return La mejor jugada para el jugador actual.
+    */
     @Override
     public Move move(GameStatus gs) {
+        
         TAULERS_EXAMINATS=0;
         TAULERS_EXAMINATS_TOTAL=1;
         ArrayList<Point> moves = gs.getMoves();
-
+       
+        // Check if the current player has any possible moves
         if (moves.isEmpty()) {
+            // If the current player has no possible moves, call the "skipTurn" method
+            gs.skipTurn();
             return null;
         }
-
+        
         Point bestMove = moves.get(0);
         int bestScore = MIN;
-
-        HashMap<GameStatus, Integer> transpTable = new HashMap<>();
-
+        
         for (Point move : moves) {
-            GameStatus nextBoard = new GameStatus(gs);
-            nextBoard.movePiece(move);
-
-            CellType opp = CellType.opposite(nextBoard.getCurrentPlayer());
-            System.out.println("piece (oposite es el siguiente a jugar) = -> "+opp);
-
-            int score = minimax(nextBoard, MAX_DEPTH, MIN, MAX, false, transpTable);
-
+            GameStatus nextBoard = new GameStatus​(gs);
+            
+            nextBoard.movePiece​(move);  //movement of possible move
+         
+            CellType opp = CellType.opposite​(nextBoard.getCurrentPlayer());
+            
+            int score = minimax(nextBoard, MAX_DEPTH, MIN, MAX, false);
+            
             if (score > bestScore) {
                 bestScore = score;
                 bestMove = move;
-            }
-            TAULERS_EXAMINATS_TOTAL++;
+            }  
+            TAULERS_EXAMINATS_TOTAL++;           
         }
         Move move = new Move(bestMove, TAULERS_EXAMINATS, TAULERS_EXAMINATS_TOTAL, SearchType.MINIMAX);
-
-        return move;
+        
+        return move;//new Move(bestMove.x, bestMove.y) 
     }
-
+    
+    /**
+    Establece el tiempo de espera en true e imprime un mensaje.
+    */
     @Override
     public void timeout() {
         timeout = true;
         System.out.println("Bah! You are so slow...");
     }
 
+    /**
+    Devuelve el nombre de este jugador.
+    @return El nombre de este jugador.
+    */
     @Override
     public String getName() {
         return name;
     }
     
-    private int minimax(GameStatus gs, int depth, double alpha, double beta, boolean maximizingPlayer, HashMap<GameStatus, Integer> transpTable) {
-        // check if the current position has been evaluated before
-        Integer score = transpTable.get(gs);
-        if (score != null) {
-            // if the position has been evaluated before, return the stored score
-            return score;
+    /**
+    Calcula la mejor puntuación para el jugador actual en el estado de juego dado 
+    usando el algoritmo minimax con poda alfa-beta.
+    @param gs Estado actual de la partida.
+    @param depth La profundidad restante de la búsqueda.
+    @param alpha El valor actual de alpha en la poda alpha-beta.
+    @param beta Valor actual de beta en la poda alfa-beta.
+    @param maximizingPlayer Bandera que indica si el jugador actual es 
+    * el jugador maximizador o el jugador minimizador.
+    @return La mejor puntuación para el jugador actual.
+    */
+    private int minimax(GameStatus gs, int depth, double alpha, double beta, boolean maximizingPlayer) {
+        //TIMEOUT--------
+         if (timeout) {    
+            return 0;
         }
-
-        // base case: check if the game is over or the maximum depth has been reached
-        if (gs.checkGameOver() || depth == 0) {
-            // return the score of the current position
+         
+        // BASE CASES----------
+        // Game over: When the game is over (that is, there are no more valid
+        //moves left), you can return the heuristic score for the 
+        //current state of the game.
+        if (gs.isGameOver()) {
             return heuristica(gs);
         }
-
-        // list of possible moves
-        ArrayList<Point> moves = gs.getMoves();
-        if (maximizingPlayer) {
+        // Alpha-beta limits: If the current alpha value is greater than or 
+        //equal to the beta value, you can return the heuristic score for the 
+        //current state of the game, since any subsequent search will not be useful.
+        if (alpha >= beta) {
+            return heuristica(gs);
+        }
+        
+        // When a player can't make a move, do a skipTurn() so the next 
+        //player can make a move
+        if (gs.getMoves().size() == 0) {
+            gs.skipTurn();
+            return minimax(gs, depth, alpha, beta, maximizingPlayer);
+        }
+        
+        // If the depth is 1, the minimax function will evaluate the heuristic 
+        //scores for the game states that can be reached by making a move 
+        //from the current game state
+        if (depth == 1) {
+            return heuristica(gs);
+        }
+        
+        // If the depth of the minimax function is 0, it means that the search 
+        //has reached the maximum depth that you have set for the search tree. 
+        //In this case, you can return the heuristic score of the current state 
+        //of the game as a result of the minimax function.
+        if (depth == 0) {
+            return heuristica(gs);
+        }
+        
+        if (maximizingPlayer){  //minimize
             int bestScore = MIN;
-            for (Point move : moves) {
-                // simulate the move on a copy of the current board
-                GameStatus nextBoard = new GameStatus(gs);
-                nextBoard.movePiece(move);
-
-                // recursive call to minimax with the updated board and reduced depth
-                int valor = minimax(nextBoard, depth - 1, alpha, beta, false, transpTable);
-
-                // update the best score for the maximizing player
-                bestScore = Math.max(bestScore, valor);
-
-                // update alpha
+            for (Point move : gs.getMoves()) {
+                GameStatus nextBoard = new GameStatus​(gs);
+                nextBoard.movePiece​(move);
+                
+                int score = minimax(nextBoard, depth-1, alpha, beta, false);
+                bestScore = Math.max(score, bestScore);
+                
                 alpha = Math.max(alpha, bestScore);
-
-                // prune the tree if alpha is greater than or equal to beta
-                if (alpha >= beta) {
-                    break;
+                if (beta <= alpha) {    //alpha-beta pruing
+                  break;
                 }
             }
-            // store the score in the transposition table
-            transpositionTable.put(gs, bestScore);
             return bestScore;
-        } else {
-            int worstScore = MAX;
-            for (Point move : moves) {
-                // simulate the move on a copy of the current board
-                GameStatus nextBoard = new GameStatus(gs);
-                nextBoard.movePiece(move);
-
-                // recursive call to minimax with the updated board and reduced depth
-                int valor = minimax(nextBoard, depth - 1, alpha, beta, true, transpTable);
-
-                // update the worst score for the minimizing player
-                worstScore = Math.min(worstScore, valor);
-
-                // update beta
-                beta = Math.min(beta, worstScore);
-
-                // prune the tree if alpha is greater than or equal to beta
-                if (alpha >= beta) {
-                    break;
+        } else{ //maximize
+            int bestScore = MAX;
+            for (Point move : gs.getMoves()) {
+                GameStatus nextBoard = new GameStatus​(gs);
+                nextBoard.movePiece​(move);
+                
+                int score = minimax(nextBoard, depth - 1, alpha, beta, true);
+                bestScore = Math.min(score, bestScore);
+                
+                beta = Math.min(beta, bestScore);
+                if (beta <= alpha) {    //alpha-beta pruing
+                  break;
                 }
             }
-            // store the score in the transposition table
-            transpositionTable.put(gs, worstScore);
-            return worstScore;
+            return bestScore;
         }
     }
-
-    
+   
+    /**
+    Determina si el disco en el punto dado del 
+    * estado del juego es estable.
+    Un disco se considera estable si está rodeado de discos del mismo 
+    * del mismo color en cualquier dirección.
+    @param p El punto del disco a comprobar.
+    @param gs El estado actual del juego.
+    @return true si el disco en el punto dado es estable, false en caso contrario.
+    */
     private boolean isStable(Point p, GameStatus gs) {
         // Check if the disc at the given point is stable
         CellType disc = gs.getPos(p.x, p.y);
@@ -206,8 +245,8 @@ public class PlayerMiniMax implements IPlayer, IAuto{
 
         return false;
     }
-
-   /**
+    
+    /**
     Calcula una puntuación heurística para el jugador actual 
     * en el estado de juego dado.
     La puntuación se basa en el número de discos, la movilidad, la estabilidad 
@@ -321,6 +360,16 @@ public class PlayerMiniMax implements IPlayer, IAuto{
 
         return score;
     }
+    
+    /**
+    Calcula el número de movimientos posibles para el jugador dado 
+    * en el estado actual de la partida.
+    @param gs Estado actual de la partida.
+    @param p La casilla actual.
+    @param player El jugador para el que se calcula la movilidad.
+    @return Número de movimientos posibles para el jugador dado en el 
+    * estado actual de la partida.
+    */
     public int getMobility(GameStatus gs, Point p, CellType player) {
         int mobility = 0;
 
@@ -341,7 +390,7 @@ public class PlayerMiniMax implements IPlayer, IAuto{
                 }
             }
         }
-
+        
         return mobility;
     }
 }
